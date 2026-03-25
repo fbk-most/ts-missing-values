@@ -1,0 +1,22 @@
+[project]
+name = "ts-missing-values"
+version = "0.1.0"
+description = "Library for detecting and filling missing values in time series data"
+readme = "README.md"
+license = "Apache-2.0"
+license-files = ["LICENSE"]
+authors = [
+    { name = "Marko P'yeshchyk", email = "mpyeshchyk@fbk.eu" }
+]
+requires-python = ">=3.12"
+dependencies = [
+    "darts>=0.43.0",
+    "matplotlib>=3.9.0",
+    "numpy>=2.0.0",
+    "pandas>=2.2.0",
+    "scikit-learn>=1.8.0",
+]
+
+[build-system]
+requires = ["uv_build>=0.10.11,<0.11.0"]
+build-backend = "uv_build"
