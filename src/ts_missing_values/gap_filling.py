@@ -126,7 +126,6 @@ def gap_transform(series:TimeSeries, window_size:int=168, threshold_percentage:f
     high_gap_density_series = TimeSeries.from_dataframe(high_gap_density_df)
     
     if plot:
-            plt.figure(figsize=(15,4))
             high_gap_density_series.plot()
             
     gap_filter_series = high_gap_density_series.map(lambda x: _invert_nan(x))
