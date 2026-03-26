@@ -46,9 +46,10 @@ def extract_gap_density(series:TimeSeries, window_size:int=168, plot:bool=False)
     if plot:
         plt.figure(figsize=(15,4))
         series.plot()
+        plt.title('original series')
     
         plt.figure(figsize=(15,4))
-        gap_density_series.plot()   
+        gap_density_series.plot(label='gap density')
     
     return gap_density_series
 
@@ -125,13 +126,19 @@ def gap_transform(series:TimeSeries, window_size:int=168, threshold_percentage:f
     high_gap_density_df = gap_density_df[gap_density_df.iloc[:,-1:] > threshold]
     high_gap_density_series = TimeSeries.from_dataframe(high_gap_density_df)
     
-    if plot:
-            high_gap_density_series.plot()
             
     gap_filter_series = high_gap_density_series.map(lambda x: _invert_nan(x))
     gap_filter_series = _keep_edge_values(gap_filter_series, window_size, percentage_to_keep=0.25)
     
     gap_unified_series = series + gap_filter_series # original with unified gaps
+
+    if plot:
+        high_gap_density_series.plot(label='high gap density')
+        plt.title('gap density of the series')
+
+        plt.figure(figsize=(15,4))
+        gap_unified_series.plot()
+        plt.title('gap transformed series')
 
     if return_density_series:
         return gap_unified_series, high_gap_density_series

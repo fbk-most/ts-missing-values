@@ -32,11 +32,14 @@ from ts_missing_values import universal_filling, get_extended_series
 candidates = get_extended_series([main_series] + candidates)
 
 filled = universal_filling(
-    main_series=main_series,
-    candidate_series=candidates,
-    period=24,          # seasonal period (e.g. 24 hours)
-    top_k=3,            # number of similar series to blend
-    metric="rmse",
+    series=main_series,
+    candidates=candidates,
+    # sporadic missing values filling
+    num_values=3,
+    distance=168,
+    # gap filling
+    k=3,
+    metric="mae",
     transform="none",
 )
 ```
