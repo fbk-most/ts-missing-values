@@ -7,13 +7,13 @@ It provides a complete pipeline — from preprocessing and gap detection to smal
 ## Installation
 
 ```bash
-pip install git+https://github.com/fbk-most/tt-missing-values.git
+pip install git+https://github.com/fbk-most/ts-missing-values.git
 ```
 
 Or with [uv](https://docs.astral.sh/uv/):
 
 ```bash
-uv add git+https://github.com/fbk-most/tt-missing-values.git
+uv add git+https://github.com/fbk-most/ts-missing-values.git
 ```
 
 ### Requirements
