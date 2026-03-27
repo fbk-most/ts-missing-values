@@ -48,9 +48,11 @@ filled = universal_filling(
 )
 ```
 ## Examples
-### `synthetic_traffic_gap_filling.ipynb`
 
-Loads a synthetic traffic sensor dataset, then fills all missing values of a selected sensor using candidates series.<br>
+- ### `examples/synthetic_traffic_gap_filling.ipynb`
+
+This notebook loads a synthetic traffic sensor dataset (from `examples/data/synthetic_traffic.csv`), then fills all missing values of a selected sensor using candidates series.
+
 Other than fillng the whole series, shows both sporadic and clustered missing values filling.
 
 ## API Overview
