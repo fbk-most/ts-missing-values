@@ -228,57 +228,7 @@ def replace_nan_with_mean_seasonality(series:TimeSeries, season_length:int) -> T
 # SMALL GAP FILLING
 # ====================================================================
 
-def replace_nan_with_neighbors(arr:np.ndarray, num_values:int=5, distance:int=168) -> np.ndarray:
-    """
-        Replace nan values with the weighted mean of neighbouring values at a certain distance.
-
-        Parameters
-        ----------
-        arr
-            array to fill
-        num_values
-            number of neighbours to consider
-        distance
-            incremental distance of each neighbour from the nan value
-        
-        Returns
-        -------
-        np.ndarray
-            array with the replaced values
-        
-        Example
-        -------
-        Given a nan value at index i, if distance is 24 and num_values is 3:
-        the value is replced by the mean of values at index [i-72, i-48, i-24, i+24, i+48, i+72]. 
-    """
-    result = arr.copy()
-    nan_indices = np.where(np.isnan(arr))[0]
-
-    right_offsets = [distance * (i + 1) for i in range(num_values)]
-    left_offsets = [-x for x in right_offsets][::-1]
-    offsets = left_offsets + right_offsets
-    
-    for i in nan_indices:
-        positions = i + np.array(offsets)
-        valid_positions = positions[(positions >= 0) & (positions < len(arr))]
-        
-        if len(valid_positions) > 0:
-            values = arr[valid_positions]
-            non_nan_values = values[~np.isnan(values)]
-            non_nan_positions = valid_positions[~np.isnan(values)]
-            
-            if len(non_nan_values) > 0:
-                weights = 1/np.abs(non_nan_positions-i)
-                weights /= weights.sum()
-
-                result[i] = (non_nan_values*weights).sum() # in this way the values are weighted proportional to 1/d, with d the distance to the point like 1 week, 2 weeks... for distance=168
-                #result[i] = np.mean(non_nan_values) # in this way the simple mean is calculated
-    return result
-
-    
-
-
-def small_gap_filling(series:TimeSeries, high_gap_density_series:TimeSeries=None, num_values:int=3, distance:int=168, mean_seasonality:int=168) -> TimeSeries:
+def sporadic_filling(series:TimeSeries, high_gap_density_series:TimeSeries=None, num_values:int=3, distance:int=168, mean_seasonality:int=168) -> TimeSeries:
     """
         Fill all the gaps (missing values) except those in the high_gap_density_series range.
 
@@ -326,10 +276,136 @@ def small_gap_filling(series:TimeSeries, high_gap_density_series:TimeSeries=None
     return small_gap_filled_series
 
 
+def replace_nan_with_neighbors(arr:np.ndarray, num_values:int=5, distance:int=168) -> np.ndarray:
+    """
+        Replace nan values with the weighted mean of neighbouring values at a certain distance.
+
+        Parameters
+        ----------
+        arr
+            array to fill
+        num_values
+            number of neighbours to consider
+        distance
+            incremental distance of each neighbour from the nan value
+        
+        Returns
+        -------
+        np.ndarray
+            array with the replaced values
+        
+        Example
+        -------
+        Given a nan value at index i, if distance is 24 and num_values is 3:
+        the value is replced by the mean of values at index [i-72, i-48, i-24, i+24, i+48, i+72]. 
+    """
+    result = arr.copy()
+    nan_indices = np.where(np.isnan(arr))[0]
+
+    right_offsets = [distance * (i + 1) for i in range(num_values)]
+    left_offsets = [-x for x in right_offsets][::-1]
+    offsets = left_offsets + right_offsets
+    
+    for i in nan_indices:
+        positions = i + np.array(offsets)
+        valid_positions = positions[(positions >= 0) & (positions < len(arr))]
+        
+        if len(valid_positions) > 0:
+            values = arr[valid_positions]
+            non_nan_values = values[~np.isnan(values)]
+            non_nan_positions = valid_positions[~np.isnan(values)]
+            
+            if len(non_nan_values) > 0:
+                weights = 1/np.abs(non_nan_positions-i)
+                weights /= weights.sum()
+
+                result[i] = (non_nan_values*weights).sum() # in this way the values are weighted proportional to 1/d, with d the distance to the point like 1 week, 2 weeks... for distance=168
+                #result[i] = np.mean(non_nan_values) # in this way the simple mean is calculated
+    return result
+
 
 # ====================================================================
 # LARGE GAP FILLING
 # ====================================================================
+
+def gap_filling(series:TimeSeries, high_gap_density_series:TimeSeries, candidates:list[TimeSeries], transform:str='none', metric:str='mae', k:int=3, plot_weighted_portions:bool=False, return_filling_series:bool=False) -> TimeSeries | tuple[TimeSeries, TimeSeries]:
+    """
+        Fill large gaps of a series using the KNN algorithm.
+
+        Must provide the series to fill, a high gap density series showing the large gaps to fill, the candidate series for the filling.
+
+        Parameters
+        ----------
+        series
+            the series to fill
+        high_gap_density_series
+            the series that identifies the large gaps
+        candidates
+            a list of TimeSeries to be evaluated for similarity
+            do NOT include the series to fill in this list
+        transform
+            the name of the transform to apply to both 
+            the main and candidate series before comparison
+            
+            values: none, log, depth, percentile, diff
+        metric
+            the name of the metric used to quantify the difference
+
+            values: mae, mape, mape_symmetric, rmse, max_distance, pearson_dissimilarity, cosine_dissimilarity
+        k
+            the number of top similar series to return
+        plot_weighted_portions
+            plot each of the k time series used for the filling with relative weights
+        return_filling_series
+            other than the filled time series, reutrn also the filling series
+
+        Returns
+        -------
+        TimeSeries
+            the time series with filled large gaps
+        tuple[TimeSeries, TimeSeries]
+            the time series with filled large gaps and the filling series
+    """
+    
+    high_gap_density_values = high_gap_density_series.values().flatten()
+    high_gap_density_mask = ~np.isnan(high_gap_density_values)
+    
+    candidates_and_distances = top_k_similar_series(series, candidates, transform, metric, k)
+    candidates = [candidate for candidate, distance in candidates_and_distances]
+    distances = [distance for candidate, distance in candidates_and_distances]
+    
+    filling_series = TimeSeries.from_times_and_values(high_gap_density_series.time_index, np.zeros(len(high_gap_density_series)))
+    candidate_series_overlapped = align_to_main_series(high_gap_density_series, candidates)
+    
+    filling_series_whole, weights = _get_filling_series(candidate_series_overlapped, distances, verbose=False, return_weights=True)
+    filling_values = np.where(high_gap_density_mask==True, filling_series_whole.values().flatten(), 0)
+    filling_series = TimeSeries.from_times_and_values(high_gap_density_series.time_index, filling_values)
+
+    if plot_weighted_portions:
+        i=0
+        for ts, weight in zip(candidate_series_overlapped, weights):
+            plt.figure()
+            ts.plot(alpha=0.5, label='series')
+            
+            ts_filling_values = np.where(high_gap_density_mask==True, ts.values().flatten(), np.nan)
+            ts_filling = TimeSeries.from_times_and_values(high_gap_density_series.time_index, ts_filling_values)
+            
+            (ts_filling).plot(color='black', label='portion')
+            (ts_filling*weight).plot(color='blue', label='weighted portion')
+    
+        plt.figure()
+        filling_series.plot(label='filling series')
+        print('number of missing values in the filling series: ',np.isnan(filling_series.values()).sum())
+    
+    series_values_with_zeros = np.where(high_gap_density_mask==True, 0, series.values().flatten()) 
+    series_to_fill_with_zeros = TimeSeries.from_times_and_values(series.time_index, series_values_with_zeros)
+    
+    filled_series = (series_to_fill_with_zeros + filling_series)
+
+    if return_filling_series:
+        return filled_series, filling_series
+    return filled_series
+
 
 def _distance_to_weights(distances:list[float], verbose:bool=False) -> list[float]:
     """
@@ -411,10 +487,12 @@ def top_k_similar_series(main_series:TimeSeries, candidate_series_list:list[Time
         transform
             the name of the transform to apply to both 
             the main and candidate series before comparison
-            values: mae, mape, mape_symmetric, rmse, max_distance, correlation, cosine_similarity
+            
+            values: none, log, depth, percentile, diff
         metric
             the name of the metric used to quantify the difference
-            values: none, log, depth, percentile, diff
+            
+            values: mae, mape, mape_symmetric, rmse, max_distance, correlation, cosine_dissimilarity
         k
             the number of top similar series to return
         quality_factor
@@ -451,83 +529,6 @@ def top_k_similar_series(main_series:TimeSeries, candidate_series_list:list[Time
     return results[1:k+1]
 
 
-def large_gap_filling(series:TimeSeries, high_gap_density_series:TimeSeries, candidates:list[TimeSeries], transform:str='none', metric:str='mae', k:int=3, plot_weighted_portions:bool=False, return_filling_series:bool=False) -> TimeSeries | tuple[TimeSeries, TimeSeries]:
-    """
-        Fill large gaps of a series using the KNN algorithm.
-
-        Must provide the series to fill, a high gap density series showing the large gaps to fill, the candidate series for the filling.
-
-        Parameters
-        ----------
-        series
-            the series to fill
-        high_gap_density_series
-            the series that identifies the large gaps
-        candidates
-            a list of TimeSeries to be evaluated for similarity
-            do NOT include the series to fill in this list
-        transform
-            the name of the transform to apply to both 
-            the main and candidate series before comparison
-            values: mae, mape, mape_symmetric, rmse, max_distance, correlation, cosine_similarity
-        metric
-            the name of the metric used to quantify the difference
-            values: none, log, depth, percentile, diff
-        k
-            the number of top similar series to return
-        plot_weighted_portions
-            plot each of the k time series used for the filling with relative weights
-        return_filling_series
-            other than the filled time series, reutrn also the filling series
-
-        Returns
-        -------
-        TimeSeries
-            the time series with filled large gaps
-        tuple[TimeSeries, TimeSeries]
-            the time series with filled large gaps and the filling series
-    """
-    
-    high_gap_density_values = high_gap_density_series.values().flatten()
-    high_gap_density_mask = ~np.isnan(high_gap_density_values)
-    
-    candidates_and_distances = top_k_similar_series(series, candidates, transform, metric, k)
-    candidates = [candidate for candidate, distance in candidates_and_distances]
-    distances = [distance for candidate, distance in candidates_and_distances]
-    
-    filling_series = TimeSeries.from_times_and_values(high_gap_density_series.time_index, np.zeros(len(high_gap_density_series)))
-    candidate_series_overlapped = align_to_main_series(high_gap_density_series, candidates)
-    
-    filling_series_whole, weights = _get_filling_series(candidate_series_overlapped, distances, verbose=False, return_weights=True)
-    filling_values = np.where(high_gap_density_mask==True, filling_series_whole.values().flatten(), 0)
-    filling_series = TimeSeries.from_times_and_values(high_gap_density_series.time_index, filling_values)
-
-    if plot_weighted_portions:
-        i=0
-        for ts, weight in zip(candidate_series_overlapped, weights):
-            plt.figure()
-            ts.plot(alpha=0.5, label='series')
-            
-            ts_filling_values = np.where(high_gap_density_mask==True, ts.values().flatten(), np.nan)
-            ts_filling = TimeSeries.from_times_and_values(high_gap_density_series.time_index, ts_filling_values)
-            
-            (ts_filling).plot(color='black', label='portion')
-            (ts_filling*weight).plot(color='blue', label='weighted portion')
-    
-        plt.figure()
-        filling_series.plot(label='filling series')
-        print('number of missing values in the filling series: ',np.isnan(filling_series.values()).sum())
-    
-    series_values_with_zeros = np.where(high_gap_density_mask==True, 0, series.values().flatten()) 
-    series_to_fill_with_zeros = TimeSeries.from_times_and_values(series.time_index, series_values_with_zeros)
-    
-    filled_series = (series_to_fill_with_zeros + filling_series)
-
-    if return_filling_series:
-        return filled_series, filling_series
-    return filled_series
-
-
 # ====================================================================
 # ALL GAPS FILLING
 # ====================================================================
@@ -552,10 +553,12 @@ def universal_filling(series:TimeSeries, candidates:list[TimeSeries], num_values
         transform
             the name of the transform to apply to both 
             the main and candidate series before comparison
-            values: mae, mape, mape_symmetric, rmse, max_distance, correlation, cosine_similarity
+
+            values: none, log, depth, percentile, diff
         metric
             the name of the metric used to quantify the difference
-            values: none, log, depth, percentile, diff
+            
+            values: mae, mape, mape_symmetric, rmse, max_distance, pearson_dissimilarity, cosine_dissimilarity
         k
             the number of top similar series to return
 
@@ -565,24 +568,22 @@ def universal_filling(series:TimeSeries, candidates:list[TimeSeries], num_values
             the fully filled time series
     """
     _, high_gap_density_series  = gap_transform(series, window_size=168, threshold_percentage=0.5, plot=False, return_density_series=True)
-    small_gap_filled_series = small_gap_filling(series, high_gap_density_series, num_values=num_values, mean_seasonality=mean_seasonality, distance=distance)
-    large_gap_filled_series, filling_series = large_gap_filling(small_gap_filled_series, high_gap_density_series, candidates, return_filling_series=True, transform=transform, metric=metric, k=k)
+    small_gap_filled_series = sporadic_filling(series, high_gap_density_series, num_values=num_values, mean_seasonality=mean_seasonality, distance=distance)
+    large_gap_filled_series, filling_series = gap_filling(small_gap_filled_series, high_gap_density_series, candidates, return_filling_series=True, transform=transform, metric=metric, k=k)
 
     # returning the series before the final step of small gap filling, this could result in some cases in a non fully-filled series
     if return_large_gap_filled_series:
         return large_gap_filled_series
     
     # running small gap filling again in case the large gap filling series has still some missing values
-    filled_series = small_gap_filling(large_gap_filled_series, high_gap_density_series=None, num_values=num_values, mean_seasonality=mean_seasonality, distance=distance)
+    filled_series = sporadic_filling(large_gap_filled_series, high_gap_density_series=None, num_values=num_values, mean_seasonality=mean_seasonality, distance=distance)
     
     return filled_series
-
 
 
 # ====================================================================
 # GAP FILLING VALIDATION
 # ====================================================================
-
 
 def random_hour_timestamp(start, end, unit='hours'):    
     n_hours = int((end - start) / pd.Timedelta(1, unit))
@@ -638,6 +639,5 @@ def create_artificial_large_gap(series, gap_length=24*30, unit='hours', return_r
     
     if return_removed_slice:
         return series_with_gap, slice_to_remove
- 
-    return series_with_gap
     
+    return series_with_gap

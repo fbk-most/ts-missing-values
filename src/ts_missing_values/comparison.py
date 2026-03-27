@@ -19,8 +19,8 @@ METRICS = {
     "mape_symmetric": lambda ts_A, ts_B: mape_symmetric(ts_A, ts_B),
     "rmse": lambda ts_A, ts_B: rmse(ts_A, ts_B),
     "max_distance": lambda ts_A, ts_B: series_max_distance(ts_A, ts_B),
-    "correlation": lambda ts_A, ts_B: series_correlation(ts_A, ts_B),
-    "cosine_similarity": lambda ts_A, ts_B: series_cosine_similarity(ts_A, ts_B)
+    "pearson_dissimilarity": lambda ts_A, ts_B: 1-series_correlation(ts_A, ts_B),
+    "cosine_dissimilarity": lambda ts_A, ts_B: 1-series_cosine_similarity(ts_A, ts_B)
 }
 
 def series_correlation(series_A:TimeSeries, series_B:TimeSeries) -> float:
