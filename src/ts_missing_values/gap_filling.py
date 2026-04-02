@@ -94,6 +94,14 @@ def _keep_edge_values(series:TimeSeries, window:int, percentage_to_keep:float) -
     return TimeSeries.from_times_and_values(series.time_index, gap_filter)
 
 
+def extract_high_gap_density(series:TimeSeries, window_size:int=168, threshold_percentage:float=0.5) -> TimeSeries:
+    threshold = window_size * threshold_percentage
+    gap_density_series = extract_gap_density(series, window_size)
+    vals = gap_density_series.univariate_values()
+    vals[vals>threshold] = np.nan
+    return gap_density_series.with_values(vals)
+
+
 def gap_transform(series:TimeSeries, window_size:int=168, threshold_percentage:float=0.5, plot:bool=False, return_density_series:bool=False) -> TimeSeries | tuple[TimeSeries, TimeSeries]:
     """
         Unify areas of dense missing values (= areas with sparse values) in a TimeSeries into larger, continuous gaps based on a rolling window and density threshold.
@@ -585,14 +593,8 @@ def universal_filling(series:TimeSeries, candidates:list[TimeSeries], num_values
 # GAP FILLING VALIDATION
 # ====================================================================
 
-def random_hour_timestamp(start, end, unit='hours'):    
-    n_hours = int((end - start) / pd.Timedelta(1, unit))
-    rand_hours = np.random.randint(0, n_hours + 1)
 
-    return start + pd.Timedelta(rand_hours, unit)
-
-
-def create_artificial_large_gap(series, gap_length=24*30, unit='hours', return_removed_slice=False, plot=False):
+def create_artificial_gap(series, gap_length=24*30, unit='hours', return_removed_slice=False, plot=False):
     '''
     Deletes randomly values from a time series creating an artificial continous gap.
     The gap ensures all values are NaN in that range.
@@ -606,10 +608,9 @@ def create_artificial_large_gap(series, gap_length=24*30, unit='hours', return_r
     if gap_length >= len(series):
         gap_length = len(series)-5
 
-    start_gap_time = random_hour_timestamp(
-        start = series.start_time(),
-        end = series.end_time() - pd.Timedelta(gap_length+1, unit)
-    )
+    valid_times = series.time_index[~np.isnan(series.univariate_values().flatten())]
+    valid_times = valid_times[valid_times <= series.end_time() - pd.Timedelta(gap_length + 1, unit)]
+    start_gap_time = pd.Timestamp(np.random.choice(valid_times))
     end_gap_time = start_gap_time + pd.Timedelta(gap_length, unit)
 
     _, slice_to_remove = series.split_before(start_gap_time)
@@ -623,14 +624,14 @@ def create_artificial_large_gap(series, gap_length=24*30, unit='hours', return_r
 
     # check edge cases and create gapped time series
     if start_gap_time == series.start_time():
-        series_with_gap = series_after_slice
+        series_with_gap = artificial_gap.concatenate(series_after_slice)
     elif end_gap_time == series.end_time():
-        series_with_gap = series_before_slice
+        series_with_gap = series_before_slice.concatenate(artificial_gap)
     else:
         series_with_gap = series_before_slice.concatenate(artificial_gap)
         series_with_gap = series_with_gap.concatenate(series_after_slice)
 
-    if plot==True:
+    if plot:
         plt.figure(figsize=(15,4))
         series.plot(label='base series')
         slice_to_remove.plot(label='slice to remove')
@@ -641,3 +642,42 @@ def create_artificial_large_gap(series, gap_length=24*30, unit='hours', return_r
         return series_with_gap, slice_to_remove
     
     return series_with_gap
+
+
+def create_artificial_sporadic_missing_values(series , number_of_artificial_gaps, plot=False):
+    '''
+        returns the series with artificial gaps created in where the series has non nan values.
+        also returns the removed values in a dataframe.
+        
+        doesn't take into consideration the large gap areas
+    '''
+
+    # I create some masks in order to choose real values to remove from the series and then compare them to the filled values
+    _, high_gap_density_series = gap_transform(series, window_size=168, return_density_series=True)
+    high_gap_density_mask = np.where(np.isnan(high_gap_density_series.values().flatten()), False, True)
+
+    series_values = series.values().flatten()
+    low_gap_density_mask = np.where(np.isnan(series_values), True, False)
+    low_gap_density_mask = np.where(high_gap_density_mask==True, False, low_gap_density_mask)
+    
+    missing_values_mask = low_gap_density_mask | high_gap_density_mask
+    
+    series_dates_array = np.array(series.time_index)
+    dates_with_values = series_dates_array[missing_values_mask==False]
+    
+    indices_of_dates_to_remove = np.random.choice(len(dates_with_values), size = number_of_artificial_gaps, replace=False)
+    dates_to_remove =  pd.to_datetime(dates_with_values[indices_of_dates_to_remove])
+    
+    df = series.to_dataframe()
+    original_values_df = df.loc[dates_to_remove]
+    df.loc[dates_to_remove] = np.nan
+    series_with_artificial_gaps = TimeSeries.from_dataframe(df)
+
+    # plotting
+    if plot:
+        plt.figure(figsize=(15,4))
+        series.plot()
+        max_value = np.nanmax(series.univariate_values())
+        TimeSeries.from_times_and_values(dates_to_remove, np.full(number_of_artificial_gaps, max_value), freq='h', fillna_value=0).plot(title='values removed')
+
+    return series_with_artificial_gaps, original_values_df
