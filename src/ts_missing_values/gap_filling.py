@@ -98,7 +98,7 @@ def extract_high_gap_density(series:TimeSeries, window_size:int=168, threshold_p
     threshold = window_size * threshold_percentage
     gap_density_series = extract_gap_density(series, window_size)
     vals = gap_density_series.univariate_values()
-    vals[vals>threshold] = np.nan
+    vals[vals<threshold] = np.nan
     return gap_density_series.with_values(vals)
 
 
@@ -528,13 +528,13 @@ def top_k_similar_series(main_series:TimeSeries, candidate_series_list:list[Time
         _, _, overlapping_stats = overlap_series_strict(main_transformed, cand_transformed, return_overlapping_stats=True)
         percentage_gap_covered = overlapping_stats[quality_factor]
         
-        metric_value = metric_func(main_transformed, cand_transformed)
         if percentage_gap_covered != 0:
-            results.append((cand, metric_value/percentage_gap_covered))
-    
+            metric_value = metric_func(main_transformed, cand_transformed)
+            if not np.isnan(metric_value):
+                results.append((cand, metric_value / percentage_gap_covered))
+                
     results.sort(key=lambda x: x[1])
-    
-    return results[1:k+1]
+    return results[:k]
 
 
 # ====================================================================
