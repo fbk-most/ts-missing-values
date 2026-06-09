@@ -1781,6 +1781,7 @@ source = { editable = "." }
 dependencies = [
     { name = "darts" },
     { name = "fastparquet" },
+    { name = "ipykernel" },
     { name = "matplotlib" },
     { name = "nbformat" },
     { name = "numpy" },
@@ -1799,6 +1800,7 @@ dev = [
 requires-dist = [
     { name = "darts", specifier = ">=0.43.0" },
     { name = "fastparquet", specifier = ">=2026.3.0" },
+    { name = "ipykernel", specifier = ">=7.2.0" },
     { name = "matplotlib", specifier = ">=3.9.0" },
     { name = "nbformat", specifier = ">=5.10.4" },
     { name = "numpy", specifier = ">=2.0.0" },
