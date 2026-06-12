@@ -2,10 +2,11 @@ import numpy as np
 import matplotlib.pyplot as plt
 from darts import TimeSeries
 import pandas as pd
+import warnings
 
 from darts.dataprocessing.transformers.window_transformer import WindowTransformer
 
-from .utility import overlap_series, overlap_series_strict, align_to_main_series
+from .utility import overlap_series, overlap_series_strict, align_to_main_series, is_series_empty
 from .comparison import METRICS, TRANSFORMS
 
 
@@ -30,18 +31,12 @@ def extract_gap_density(series:TimeSeries, window_size:int=168, plot:bool=False)
             gap density time series
     """
     
-    if window_size<1 or not isinstance(window_size, int):
+    if window_size < 1 or not isinstance(window_size, int):
         raise ValueError('window_size must be an integer greater than 0')
-
-    transform = {
-        'function': lambda x: np.sum(np.isnan(x)),
-        'mode': 'rolling',
-        'window': window_size,
-        'min_periods': 0,
-        'center': True,
-    }
-    wt = WindowTransformer(transform, forecasting_safe=False)
-    gap_density_series = wt.transform(series)
+    
+    df = series.to_dataframe()
+    gap_density = df.isna().rolling(window=window_size, min_periods=0, center=True).sum()
+    gap_density_series = TimeSeries.from_dataframe(gap_density)
 
     if plot:
         plt.figure(figsize=(15,4))
@@ -374,14 +369,23 @@ def gap_filling(series:TimeSeries, high_gap_density_series:TimeSeries, candidate
         tuple[TimeSeries, TimeSeries]
             the time series with filled large gaps and the filling series
     """
+    if is_series_empty(series):
+        warnings.warn(
+            f"Series contains only NaN values, returning as-is.",
+            UserWarning
+        )
+        return series
     
     high_gap_density_values = high_gap_density_series.values().flatten()
     high_gap_density_mask = ~np.isnan(high_gap_density_values)
     
+    candidates = [cand for cand in candidates if not is_series_empty(cand)]
+    if len(candidates) < k:
+        raise ValueError(f'not enough candidate series with k={k}\nfound {len(candidates)} non empty candidates')
+
     candidates_and_distances = top_k_similar_series(series, candidates, transform, metric, k)
     candidates = [candidate for candidate, distance in candidates_and_distances]
     distances = [distance for candidate, distance in candidates_and_distances]
-    
     filling_series = TimeSeries.from_times_and_values(high_gap_density_series.time_index, np.zeros(len(high_gap_density_series)))
     candidate_series_overlapped = align_to_main_series(high_gap_density_series, candidates)
     
@@ -529,9 +533,14 @@ def top_k_similar_series(main_series:TimeSeries, candidate_series_list:list[Time
         percentage_gap_covered = overlapping_stats[quality_factor]
         
         if percentage_gap_covered != 0:
-            metric_value = metric_func(main_transformed, cand_transformed)
-            if not np.isnan(metric_value):
-                results.append((cand, metric_value / percentage_gap_covered))
+            with warnings.catch_warnings(): # if mertic_value is nan we ignore it so the Warnings are useless
+                warnings.filterwarnings("ignore", message="Mean of empty slice", category=RuntimeWarning)
+                try:
+                    metric_value = metric_func(main_transformed, cand_transformed)
+                except ValueError:
+                    metric_value=np.nan
+                if not np.isnan(metric_value):
+                    results.append((cand, metric_value / percentage_gap_covered))
                 
     results.sort(key=lambda x: x[1])
     return results[:k]
