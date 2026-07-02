@@ -653,7 +653,7 @@ def create_artificial_gap(series, gap_length=24*30, unit='hours', return_removed
     return series_with_gap
 
 
-def create_artificial_sporadic_missing_values(series , number_of_artificial_gaps, plot=False):
+def create_artificial_sporadic_missing_values(series , number_of_artificial_gaps, return_missing_values=False, plot=False):
     '''
         returns the series with artificial gaps created in where the series has non nan values.
         also returns the removed values in a dataframe.
@@ -689,4 +689,6 @@ def create_artificial_sporadic_missing_values(series , number_of_artificial_gaps
         max_value = np.nanmax(series.univariate_values())
         TimeSeries.from_times_and_values(dates_to_remove, np.full(number_of_artificial_gaps, max_value), freq='h', fillna_value=0).plot(title='values removed')
 
-    return series_with_artificial_gaps, original_values_df
+    if return_missing_values:
+        return series_with_artificial_gaps, original_values_df
+    return series_with_artificial_gaps
