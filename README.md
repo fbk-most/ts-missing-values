@@ -30,17 +30,20 @@ from ts_missing_values import universal_filling, get_extended_series
 # Given that all_series is the list of all TimeSeries
 # Assume `main_series` is a TimeSeries with gaps and
 # `candidates` is a list of related TimeSeries.
+
 index = 4
-main_sereis = all_series[index]
+main_series = all_series[index]
 candidates = all_series.copy()
 candidates.remove(main_series)
 
 filled = universal_filling(
     series=main_series,
     candidates=candidates,
+
     # sporadic missing values filling
     num_values=3,
     distance=168,
+    
     # gap filling
     k=3,
     metric="mae",

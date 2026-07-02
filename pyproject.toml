@@ -13,6 +13,7 @@ requires-python = ">=3.12"
 dependencies = [
     "darts>=0.43.0",
     "fastparquet>=2026.3.0",
+    "ipykernel>=7.2.0",
     "matplotlib>=3.9.0",
     "nbformat>=5.10.4",
     "numpy>=2.0.0",
@@ -25,3 +26,8 @@ dependencies = [
 [build-system]
 requires = ["uv_build>=0.10.11,<0.11.0"]
 build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "ipykernel>=7.2.0",
+]
