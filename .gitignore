@@ -9,3 +9,7 @@ gate_tuning
 
 # Virtual environments
 .venv
+
+# testing
+.vscode
+.coverage
