@@ -1,6 +1,7 @@
 import numpy as np
 from darts import TimeSeries
 from darts.utils.missing_values import fill_missing_values
+from ts_missing_values.utility import is_series_empty
 
 
 def eliminate_outliers(series:TimeSeries, N:int=3, symmetric:bool=False, verbose:bool=False) -> TimeSeries:
@@ -23,13 +24,17 @@ def eliminate_outliers(series:TimeSeries, N:int=3, symmetric:bool=False, verbose
         TimeSeries
             series having ouliers replaced with np.nan
     """
-
-    values = series.univariate_values()
-    values_non_nan = values[~np.isnan(values)]
-
-    stdev = np.std(values_non_nan)
-    mean = np.mean(values_non_nan)
+    if is_series_empty(series):
+        return(series)
     
+    if len(series) <=1:
+        return series
+    
+    values = series.univariate_values()
+
+    stdev = np.nanstd(values)
+    mean = np.nanmean(values)
+
     # replace low/high values with NaN
     values_without_outliers = np.array([v if v < mean + N*stdev else np.nan for v in values])
     if symmetric:
@@ -76,6 +81,9 @@ def preprocess_series(series:TimeSeries, delete_outliers:bool=False, N:int=3, sy
 
     result_series = series
     
+    if is_series_empty(series):
+        return series
+
     if delete_outliers:
         result_series = eliminate_outliers(result_series, N, symmetric=symmetric, verbose=verbose)
     
@@ -83,11 +91,11 @@ def preprocess_series(series:TimeSeries, delete_outliers:bool=False, N:int=3, sy
         result_series = fill_missing_values(result_series)
 
     if log_scale:
-        series_log = result_series.map(np.log)
-        vals = series_log.values()
-        vals[vals<=0]=1
+        vals = result_series.univariate_values()
+        vals[vals<0] = np.e
+        new_vals = np.log(vals)
         
-        series_wo_zeros = TimeSeries.from_times_and_values(result_series.time_index, vals)
+        series_wo_zeros = TimeSeries.from_times_and_values(result_series.time_index, new_vals)
         result_series = series_wo_zeros
 
     return result_series
