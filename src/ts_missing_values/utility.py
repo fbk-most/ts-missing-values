@@ -195,7 +195,10 @@ def overlap_series_strict(series_A:TimeSeries, series_B:TimeSeries, return_overl
     """
 
     if not _are_overlappable(series_A, series_B):
-            raise ValueError('The two time series dont\'t have the same time range and are not overlappable')
+        raise ValueError('The two time series dont\'t have the same time range and are not overlappable')
+    
+    if is_series_empty(series_A) or is_series_empty(series_B):
+        raise ValueError("One of the two TimeSeries is empty (full of NaNs)")
     
     start = min(series_A.start_time(), series_B.start_time())
     end = max(series_A.end_time(), series_B.end_time())
@@ -228,10 +231,7 @@ def overlap_series_strict(series_A:TimeSeries, series_B:TimeSeries, return_overl
         num_values = len(original_values) - num_nan_values
         num_values_overlapped = len(values_A_overlapped)
         
-        if num_values > 0:
-            percentage_overlapped_values = num_values_overlapped / num_values
-        else:
-            percentage_overlapped_values = 0.0
+        percentage_overlapped_values = num_values_overlapped / num_values
 
         # if there is no gap to cover 1 is returned always
         if num_nan_values!=0:
@@ -239,10 +239,7 @@ def overlap_series_strict(series_A:TimeSeries, series_B:TimeSeries, return_overl
         else:
             percentage_gap_covered = 1
 
-        if num_values_total_range > 0:
-            percentage_symmetric_overlap = num_values_overlapped / num_values_total_range
-        else:
-            percentage_symmetric_overlap = 0.0
+        percentage_symmetric_overlap = num_values_overlapped / num_values_total_range
 
         stats = {   
             "num_values_used": num_values_overlapped,
@@ -406,4 +403,6 @@ def is_series_empty(ts:TimeSeries) -> bool:
         -------
         True if series is empty, False otherwise
     """
+    if len(ts) == 0:
+        return True
     return not bool(np.sum(~np.isnan(ts.univariate_values())))
